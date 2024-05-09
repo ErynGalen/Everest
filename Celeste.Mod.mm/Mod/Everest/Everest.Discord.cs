@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 
 namespace Celeste.Mod {
     public static partial class Everest {
-        public class DiscordSDK : GameComponent {
+        public class Discord : GameComponent {
             private class Activity {
                 public string state;
                 public string details;
@@ -36,7 +36,7 @@ namespace Celeste.Mod {
             public static TextMenuExt.EaseInSubHeaderExt FailureWarning { private get; set; }
 
 
-            public static DiscordSDK Instance { get; private set; } = null;
+            public static Discord Instance { get; private set; } = null;
 
             public static bool IsConnected => Instance != null && Instance.WsClient != null && Instance.WsClient.State == WebSocketState.Open;
             private bool WasConnected;
@@ -80,12 +80,12 @@ namespace Celeste.Mod {
                 }).Start();
             }
 
-            public static DiscordSDK CreateInstance() {
+            public static Discord CreateInstance() {
                 if (Instance != null) {
                     return Instance;
                 }
 
-                Instance = new DiscordSDK(Celeste.Instance);
+                Instance = new Discord(Celeste.Instance);
 
                 return Instance;
             }
@@ -105,7 +105,7 @@ namespace Celeste.Mod {
                 ConnectingTask = WsClient.ConnectAsync(serverUrl, CancellationSource.Token);
             }
 
-            private DiscordSDK(Game game) : base(game) {
+            private Discord(Game game) : base(game) {
                 UpdateOrder = -500000;
 
                 Logger.Log(LogLevel.Verbose, "discord-game-sdk", $"Initializing Discord Game SDK...");

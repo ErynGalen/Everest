@@ -482,7 +482,7 @@ namespace Celeste.Mod {
                 EverestModuleAssemblyContext._AllContextsLock.ExitReadLock();
             }
 
-            DiscordSDK.LoadRichPresenceIcons();
+            Discord.LoadRichPresenceIcons();
         }
 
         internal static bool _Initialized;

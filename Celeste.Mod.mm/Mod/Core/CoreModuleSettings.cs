@@ -503,19 +503,19 @@ namespace Celeste.Mod.Core {
             TextMenu.Option<bool> showSide = new TextMenu.OnOff(Dialog.Clean("modoptions_coremodule_discordshowside"), DiscordShowSide)
                 .Change(value => {
                     DiscordShowSide = value;
-                    Everest.DiscordSDK.Instance?.UpdatePresence(session);
+                    Everest.Discord.Instance?.UpdatePresence(session);
                 });
 
             TextMenu.Option<bool> showRoom = new TextMenu.OnOff(Dialog.Clean("modoptions_coremodule_discordshowroom"), DiscordShowRoom)
                 .Change(value => {
                     DiscordShowRoom = value;
-                    Everest.DiscordSDK.Instance?.UpdatePresence(session);
+                    Everest.Discord.Instance?.UpdatePresence(session);
                 });
 
             TextMenu.Item showMap = new TextMenu.OnOff(Dialog.Clean("modoptions_coremodule_discordshowmap"), DiscordShowMap)
                 .Change(value => {
                     DiscordShowMap = value;
-                    Everest.DiscordSDK.Instance?.UpdatePresence(session);
+                    Everest.Discord.Instance?.UpdatePresence(session);
 
                     showSide.Disabled = !DiscordShowMap;
                     showRoom.Disabled = !DiscordShowMap;
@@ -531,19 +531,19 @@ namespace Celeste.Mod.Core {
             TextMenu.Item showIcon = new TextMenu.OnOff(Dialog.Clean("modoptions_coremodule_discordshowicon"), DiscordShowIcon)
                 .Change(value => {
                     DiscordShowIcon = value;
-                    Everest.DiscordSDK.Instance?.UpdatePresence(session);
+                    Everest.Discord.Instance?.UpdatePresence(session);
                 });
 
             TextMenu.Item showDeaths = new TextMenu.OnOff(Dialog.Clean("modoptions_coremodule_discordshowdeaths"), DiscordShowDeaths)
                 .Change(value => {
                     DiscordShowDeaths = value;
-                    Everest.DiscordSDK.Instance?.UpdatePresence(session);
+                    Everest.Discord.Instance?.UpdatePresence(session);
                 });
 
             TextMenu.Item showBerries = new TextMenu.OnOff(Dialog.Clean("modoptions_coremodule_discordshowberries"), DiscordShowBerries)
                 .Change(value => {
                     DiscordShowBerries = value;
-                    Everest.DiscordSDK.Instance?.UpdatePresence(session);
+                    Everest.Discord.Instance?.UpdatePresence(session);
                 });
 
             TextMenuExt.SubMenu submenu = new TextMenuExt.SubMenu(Dialog.Clean("modoptions_coremodule_discordrichpresenceoptions"), false)
@@ -559,22 +559,22 @@ namespace Celeste.Mod.Core {
                 HeightExtra = 0f
             };
 
-            Everest.DiscordSDK.FailureWarning = failureWarning;
+            Everest.Discord.FailureWarning = failureWarning;
 
             TextMenu.Item masterSwitch = new TextMenu.OnOff(Dialog.Clean("modoptions_coremodule_discordrichpresence"), DiscordRichPresence)
                 .Change(value => {
                     DiscordRichPresence = value;
                     if (DiscordRichPresence) {
-                        Everest.DiscordSDK.CreateInstance()?.UpdatePresence(session);
+                        Everest.Discord.CreateInstance()?.UpdatePresence(session);
                     } else {
-                        Everest.DiscordSDK.Instance?.Dispose();
+                        Everest.Discord.Instance?.Dispose();
                     }
                     submenu.Disabled = !value;
-                    failureWarning.FadeVisible = DiscordRichPresence && !Everest.DiscordSDK.IsConnected;
+                    failureWarning.FadeVisible = DiscordRichPresence && !Everest.Discord.IsConnected;
                 });
 
             masterSwitch.OnEnter += delegate {
-                failureWarning.FadeVisible = DiscordRichPresence && !Everest.DiscordSDK.IsConnected;
+                failureWarning.FadeVisible = DiscordRichPresence && !Everest.Discord.IsConnected;
             };
             masterSwitch.OnLeave += delegate {
                 failureWarning.FadeVisible = false;
