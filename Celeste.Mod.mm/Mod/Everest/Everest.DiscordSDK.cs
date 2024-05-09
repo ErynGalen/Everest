@@ -6,32 +6,66 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
+using System.Net.WebSockets;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
+
 
 namespace Celeste.Mod {
     public static partial class Everest {
         public class DiscordSDK : GameComponent {
+            private class Activity {
+                public string state;
+                public string details;
+                public Timestamps timestamps;
+                public Assets assets;
+            }
+
+            private class Timestamps {
+                public long start;
+            }
+
+            private class Assets {
+                public string large_image = "";
+                public string large_text = "";
+                public string small_image = "";
+                public string small_text = "";
+            }
+
+            public static TextMenuExt.EaseInSubHeaderExt FailureWarning { private get; set; }
+
+
             public static DiscordSDK Instance { get; private set; } = null;
 
-            private Discord.Discord DiscordInstance;
+            public static bool IsConnected => Instance != null && Instance.WsClient != null && Instance.WsClient.State == WebSocketState.Open;
+            private bool WasConnected;
+
 
             private static HashSet<string> RichPresenceIcons = new HashSet<string>();
 
+            private Dictionary<string, string> IconURLCache = new Dictionary<string, string>();
+
+            // parameters
+            private const long CLIENT_ID = 430794114037055489L;
             private const string IconBaseURL = "https://celestemodupdater.0x0a.de";
 
-            private Dictionary<string, string> IconURLCache = new Dictionary<string, string>();
-            private Discord.Activity NextPresence;
+            private const int MinPort = 6463;
+            private const int MaxPort = 6472;
+
+            // state
+            private ClientWebSocket WsClient;
+
+            private int CurrentPort;
+            private Task ConnectingTask;
+            private Task SendTask;
+
+            private Activity NextPresence;
             private bool MustUpdatePresence;
 
-            private long StartTimestamp = 0;
+            private CancellationTokenSource CancellationSource;
 
-            private static readonly Dictionary<Discord.LogLevel, LogLevel> DiscordToEverestLogLevel = new Dictionary<Discord.LogLevel, LogLevel>() {
-                { Discord.LogLevel.Error, LogLevel.Error },
-                { Discord.LogLevel.Warn, LogLevel.Warn },
-                { Discord.LogLevel.Info, LogLevel.Info },
-                { Discord.LogLevel.Debug, LogLevel.Debug }
-            };
+            private long StartTimestamp = 0;
 
             internal static void LoadRichPresenceIcons() {
                 new Task(() => {
@@ -51,31 +85,34 @@ namespace Celeste.Mod {
                     return Instance;
                 }
 
-                DiscordSDK sdk = new DiscordSDK(Celeste.Instance);
-                if (sdk.DiscordInstance != null) {
-                    Instance = sdk;
-                }
+                Instance = new DiscordSDK(Celeste.Instance);
 
                 return Instance;
+            }
+
+            private void Connect(bool next) {
+                if (next) {
+                    if (CurrentPort < MaxPort) {
+                        CurrentPort += 1;
+                    } else {
+                        // Discord not running
+                        Dispose();
+                    }
+                }
+                Uri serverUrl = new Uri($"ws://127.0.0.1:{CurrentPort}/?client_id={CLIENT_ID}&encoding=json");
+
+                WsClient = new ClientWebSocket();
+                ConnectingTask = WsClient.ConnectAsync(serverUrl, CancellationSource.Token);
             }
 
             private DiscordSDK(Game game) : base(game) {
                 UpdateOrder = -500000;
 
                 Logger.Log(LogLevel.Verbose, "discord-game-sdk", $"Initializing Discord Game SDK...");
-                try {
-                    DiscordInstance = new Discord.Discord(430794114037055489L, (ulong) Discord.CreateFlags.NoRequireDiscord);
-                } catch (Exception e) {
-                    Logger.Log(LogLevel.Warn, "discord-game-sdk", "Could not initialize Discord Game SDK!");
-                    Logger.LogDetailed(e, "discord-game-sdk");
-                    return;
-                }
-                DiscordInstance.SetLogHook(Discord.LogLevel.Debug, LogHandler);
+                CancellationSource = new CancellationTokenSource();
+                CurrentPort = MinPort;
 
-                DiscordInstance.GetUserManager().OnCurrentUserUpdate += () => {
-                    Discord.User user = DiscordInstance.GetUserManager().GetCurrentUser();
-                    Logger.Log(LogLevel.Verbose, "discord-game-sdk", $"Connected user is {user.Username}#{user.Discriminator}");
-                };
+                Connect(false);
 
                 Events.Celeste.OnExiting += OnGameExit;
                 Events.MainMenu.OnCreateButtons += OnMainMenu;
@@ -95,8 +132,6 @@ namespace Celeste.Mod {
                 Events.Level.OnLoadLevel -= OnLoadLevel;
                 Events.Level.OnExit -= OnLevelExit;
 
-                DiscordInstance?.Dispose();
-
                 Instance = null;
                 Celeste.Instance.Components.Remove(this);
 
@@ -104,31 +139,46 @@ namespace Celeste.Mod {
             }
 
             public override void Update(GameTime gameTime) {
-                if (MustUpdatePresence) {
-                    Logger.Log(LogLevel.Verbose, "discord-game-sdk", $"Changing activity: state='{NextPresence.State}', " +
-                    $"details='{NextPresence.Details}', image='{NextPresence.Assets.LargeImage}', text='{NextPresence.Assets.LargeText}', timestamp='{NextPresence.Timestamps.Start}'");
-
-                    DiscordInstance.GetActivityManager().UpdateActivity(NextPresence, (result) => {
-                        if (result == Discord.Result.Ok) {
-                            Logger.Log(LogLevel.Verbose, "discord-game-sdk", "Presence changed successfully!");
-                        } else {
-                            Logger.Log(LogLevel.Warn, "discord-game-sdk", $"Failed to change presence: {result}");
+                if (!ConnectingTask.IsCompleted) {
+                    return;
+                }
+                if (WsClient.State != WebSocketState.Open) {
+                    Logger.Log(LogLevel.Verbose, "discord-game-sdk", $"Not connected (port: {CurrentPort}, state: {WsClient.State})");
+                    Connect(true);
+                    return;
+                } else {
+                    if (!WasConnected) {
+                        Logger.Log(LogLevel.Info, "discord-game-sdk", $"Connected to Discord WebSocket on port {CurrentPort}");
+                        if (FailureWarning != null) {
+                            FailureWarning.FadeVisible = false;
                         }
+                    }
+                }
+                WasConnected = WsClient.State == WebSocketState.Open;
+
+                if (SendTask != null && !SendTask.IsCompleted) {
+                    // the WebSocket can't handle several send tasks at the same time
+                    // TODO: cancel the previous task rather than waiting for it to finish
+                    return;
+                }
+                if (MustUpdatePresence) {
+                    JObject command = JObject.FromObject(new {
+                        cmd = "SET_ACTIVITY",
+                        args = new {
+                            activity = NextPresence,
+                        },
+                        nonce = DateTime.UtcNow.Ticks,
                     });
+                    string json = command.ToString();
+                    byte[] utf8 = System.Text.Encoding.UTF8.GetBytes(json);
+
+                    Logger.Log(LogLevel.Verbose, "discord-game-sdk", "Sending: " + json);
+
+                    SendTask = WsClient.SendAsync(utf8, WebSocketMessageType.Text, true, CancellationSource.Token);
 
                     MustUpdatePresence = false;
                 }
 
-                try {
-                    DiscordInstance.RunCallbacks();
-                } catch (Discord.ResultException e) {
-                    Logger.Log(LogLevel.Warn, "discord-game-sdk", $"Failed to run Discord callbacks ({e.Message})! Disposing Game SDK.");
-                    Dispose();
-                }
-            }
-
-            private void LogHandler(Discord.LogLevel level, string message) {
-                Logger.Log(DiscordToEverestLogLevel[level], "discord-game-sdk", message);
             }
 
             private void OnGameExit() {
@@ -154,16 +204,16 @@ namespace Celeste.Mod {
 
             internal void UpdatePresence(Session session = null) {
                 if (session == null) {
-                    NextPresence = new Discord.Activity {
-                        Details = "In Menus"
+                    NextPresence = new Activity {
+                        details = "In Menus"
                     };
 
                     if (CoreModule.Settings.DiscordShowIcon) {
-                        NextPresence.Assets = new Discord.ActivityAssets() {
-                            LargeImage = IconBaseURL + "/rich-presence-icons-static/everest.png",
-                            LargeText = "Everest",
-                            SmallImage = IconBaseURL + "/rich-presence-icons-static/celeste.png",
-                            SmallText = "Celeste"
+                        NextPresence.assets = new Assets {
+                            large_image = IconBaseURL + "/rich-presence-icons-static/everest.png",
+                            large_text = "Everest",
+                            small_image = IconBaseURL + "/rich-presence-icons-static/celeste.png",
+                            small_text = "Celeste"
                         };
                     }
                 } else {
@@ -212,20 +262,20 @@ namespace Celeste.Mod {
                         state += Pluralize(session.Deaths, "death", "deaths");
                     }
 
-                    NextPresence = new Discord.Activity {
-                        Details = "Playing " + mapName + side + room,
-                        State = state,
-                        Timestamps = {
-                            Start = StartTimestamp
+                    NextPresence = new Activity {
+                        details = "Playing " + mapName + side + room,
+                        state = state,
+                        timestamps = new Timestamps {
+                            start = StartTimestamp
                         }
                     };
 
                     if (CoreModule.Settings.DiscordShowIcon) {
-                        NextPresence.Assets = new Discord.ActivityAssets() {
-                            LargeImage = icon,
-                            LargeText = fullName,
-                            SmallImage = IconBaseURL + "/rich-presence-icons-static/celeste.png",
-                            SmallText = "Celeste"
+                        NextPresence.assets = new Assets {
+                            large_image = icon,
+                            large_text = fullName,
+                            small_image = IconBaseURL + "/rich-presence-icons-static/celeste.png",
+                            small_text = "Celeste"
                         };
                     }
                 }

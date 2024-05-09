@@ -559,6 +559,8 @@ namespace Celeste.Mod.Core {
                 HeightExtra = 0f
             };
 
+            Everest.DiscordSDK.FailureWarning = failureWarning;
+
             TextMenu.Item masterSwitch = new TextMenu.OnOff(Dialog.Clean("modoptions_coremodule_discordrichpresence"), DiscordRichPresence)
                 .Change(value => {
                     DiscordRichPresence = value;
@@ -568,11 +570,11 @@ namespace Celeste.Mod.Core {
                         Everest.DiscordSDK.Instance?.Dispose();
                     }
                     submenu.Disabled = !value;
-                    failureWarning.FadeVisible = DiscordRichPresence && Everest.DiscordSDK.Instance == null;
+                    failureWarning.FadeVisible = DiscordRichPresence && !Everest.DiscordSDK.IsConnected;
                 });
 
             masterSwitch.OnEnter += delegate {
-                failureWarning.FadeVisible = DiscordRichPresence && Everest.DiscordSDK.Instance == null;
+                failureWarning.FadeVisible = DiscordRichPresence && !Everest.DiscordSDK.IsConnected;
             };
             masterSwitch.OnLeave += delegate {
                 failureWarning.FadeVisible = false;
