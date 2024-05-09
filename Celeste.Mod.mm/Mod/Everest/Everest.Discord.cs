@@ -132,6 +132,9 @@ namespace Celeste.Mod {
                 Events.Level.OnLoadLevel -= OnLoadLevel;
                 Events.Level.OnExit -= OnLevelExit;
 
+                if (WsClient != null) {
+                    _ = WsClient.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationSource.Token);
+                }
                 Instance = null;
                 Celeste.Instance.Components.Remove(this);
 
@@ -252,14 +255,14 @@ namespace Celeste.Mod {
 
                     string state = "";
                     if (CoreModule.Settings.DiscordShowBerries) {
-                        state = Pluralize(session.Strawberries.Count, "berry", "berries");
+                        state = PluralizeAlt(session.Strawberries.Count, "berry", "berries", "🍓");
                     }
                     if (CoreModule.Settings.DiscordShowDeaths) {
                         if (!string.IsNullOrEmpty(state)) {
                             state += " | ";
                         }
 
-                        state += Pluralize(session.Deaths, "death", "deaths");
+                        state += PluralizeAlt(session.Deaths, "death", "deaths", "💀");
                     }
 
                     NextPresence = new Activity {
@@ -328,7 +331,10 @@ namespace Celeste.Mod {
                 }
             }
 
-            private string Pluralize(int number, string singular, string plural) {
+            private string PluralizeAlt(int number, string singular, string plural, string alt) {
+                if (CoreModule.Settings.DiscordUseEmojis) {
+                    return number + " x " + alt;
+                }
                 return number + " " + (number == 1 ? singular : plural);
             }
         }

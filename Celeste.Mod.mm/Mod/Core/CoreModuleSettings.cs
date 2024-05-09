@@ -280,6 +280,8 @@ namespace Celeste.Mod.Core {
         public bool DiscordShowBerries { get; set; } = true;
         [SettingIgnore]
         public bool DiscordShowDeaths { get; set; } = true;
+        [SettingIgnore]
+        public bool DiscordUseEmojis { get; set; } = false;
 
         [SettingIgnore]
         public int DebugRCPort { get; set; } = 32270;
@@ -546,13 +548,20 @@ namespace Celeste.Mod.Core {
                     Everest.Discord.Instance?.UpdatePresence(session);
                 });
 
+            TextMenu.Item useEmojis = new TextMenu.OnOff(Dialog.Clean("modoptions_coremodule_discorduseemojis"), DiscordUseEmojis)
+                .Change(value => {
+                    DiscordUseEmojis = value;
+                    Everest.Discord.Instance?.UpdatePresence(session);
+                });
+
             TextMenuExt.SubMenu submenu = new TextMenuExt.SubMenu(Dialog.Clean("modoptions_coremodule_discordrichpresenceoptions"), false)
                 .Add(showIcon)
                 .Add(showMap)
                 .Add(showSide)
                 .Add(showRoom)
                 .Add(showDeaths)
-                .Add(showBerries);
+                .Add(showBerries)
+                .Add(useEmojis);
 
             TextMenuExt.EaseInSubHeaderExt failureWarning = new TextMenuExt.EaseInSubHeaderExt(Dialog.Clean("modoptions_coremodule_discordfailed"), false, menu) {
                 TextColor = Color.Goldenrod,
