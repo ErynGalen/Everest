@@ -20,6 +20,17 @@ namespace Celeste.Mod {
                 public string details;
                 public Timestamps timestamps;
                 public Assets assets;
+
+                public string ToJson() {
+                    JObject command = JObject.FromObject(new {
+                        cmd = "SET_ACTIVITY",
+                        args = new {
+                            activity = this,
+                        },
+                        nonce = DateTime.UtcNow.Ticks,
+                    });
+                    return command.ToString();
+                }
             }
 
             private class Timestamps {
@@ -108,7 +119,7 @@ namespace Celeste.Mod {
             private Discord(Game game) : base(game) {
                 UpdateOrder = -500000;
 
-                Logger.Log(LogLevel.Verbose, "discord-game-sdk", $"Initializing Discord Game SDK...");
+                Logger.Log(LogLevel.Verbose, "discord-game-sdk", $"Attempting to connect to Discord WebSocket...");
                 CancellationSource = new CancellationTokenSource();
                 CurrentPort = MinPort;
 
@@ -120,8 +131,6 @@ namespace Celeste.Mod {
                 Events.Level.OnExit += OnLevelExit;
 
                 Celeste.Instance.Components.Add(this);
-
-                Logger.Log(LogLevel.Info, "discord-game-sdk", "Discord Game SDK initialized!");
             }
 
             protected override void Dispose(bool disposing) {
@@ -133,8 +142,14 @@ namespace Celeste.Mod {
                 Events.Level.OnExit -= OnLevelExit;
 
                 if (WsClient != null) {
-                    _ = WsClient.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationSource.Token);
+                    try {
+                        _ = WsClient.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationSource.Token);
+                    } catch (ObjectDisposedException e) {
+                        _ = e;
+                        // happens when Discord is not running
+                    }
                 }
+
                 Instance = null;
                 Celeste.Instance.Components.Remove(this);
 
@@ -165,17 +180,8 @@ namespace Celeste.Mod {
                     return;
                 }
                 if (MustUpdatePresence) {
-                    JObject command = JObject.FromObject(new {
-                        cmd = "SET_ACTIVITY",
-                        args = new {
-                            activity = NextPresence,
-                        },
-                        nonce = DateTime.UtcNow.Ticks,
-                    });
-                    string json = command.ToString();
+                    string json = NextPresence.ToJson();
                     byte[] utf8 = System.Text.Encoding.UTF8.GetBytes(json);
-
-                    Logger.Log(LogLevel.Verbose, "discord-game-sdk", "Sending: " + json);
 
                     SendTask = WsClient.SendAsync(utf8, WebSocketMessageType.Text, true, CancellationSource.Token);
 
@@ -265,12 +271,17 @@ namespace Celeste.Mod {
                         state += PluralizeAlt(session.Deaths, "death", "deaths", "💀");
                     }
 
+                    Timestamps timestamps = null;
+                    if (StartTimestamp != 0) {
+                        timestamps = new Timestamps {
+                            start = StartTimestamp,
+                        };
+                    }
+
                     NextPresence = new Activity {
                         details = "Playing " + mapName + side + room,
                         state = state,
-                        timestamps = new Timestamps {
-                            start = StartTimestamp
-                        }
+                        timestamps = timestamps
                     };
 
                     if (CoreModule.Settings.DiscordShowIcon) {
@@ -286,11 +297,11 @@ namespace Celeste.Mod {
                 MustUpdatePresence = true;
             }
 
-            private string FilterEmojiFrom(string s) {
+            private static string FilterEmojiFrom(string s) {
                 return Regex.Replace(Emoji.Apply(s), "[" + Emoji.Start + "-" + Emoji.End + "]", "").Trim();
             }
 
-            private bool IsOnlyMapInLevelSet(patch_AreaData area) {
+            private static bool IsOnlyMapInLevelSet(patch_AreaData area) {
                 foreach (patch_AreaData otherArea in AreaData.Areas) {
                     if (area.LevelSet == otherArea.LevelSet && area.SID != otherArea.SID) {
                         return false;
@@ -299,7 +310,7 @@ namespace Celeste.Mod {
                 return true;
             }
 
-            private long DateTimeToDiscordTime(DateTime time) {
+            private static long DateTimeToDiscordTime(DateTime time) {
                 return (long) Math.Floor((time.ToUniversalTime() - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds);
             }
 
@@ -313,7 +324,7 @@ namespace Celeste.Mod {
                 return url;
             }
 
-            private string GetMapIconURL(AreaData areaData) {
+            private static string GetMapIconURL(AreaData areaData) {
                 if (areaData.Icon == "areas/null" || !Content.Map.TryGetValue("Graphics/Atlases/Gui/" + areaData.Icon, out ModAsset icon)) {
                     if (areaData.Icon.StartsWith("areas/")) {
                         return IconBaseURL + "/rich-presence-icons-static/" + areaData.Icon.Substring(6).ToLowerInvariant() + ".png";
@@ -331,7 +342,7 @@ namespace Celeste.Mod {
                 }
             }
 
-            private string PluralizeAlt(int number, string singular, string plural, string alt) {
+            private static string PluralizeAlt(int number, string singular, string plural, string alt) {
                 if (CoreModule.Settings.DiscordUseEmojis) {
                     return number + " x " + alt;
                 }
