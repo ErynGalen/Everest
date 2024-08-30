@@ -304,7 +304,27 @@ namespace Celeste {
             if (!CoreModule.Settings.TrueLastAreaInFileSelect || string.IsNullOrEmpty(SaveData.TrueLastAreaSID)) {
                 return Dialog.Clean(AreaData.Areas[FurthestArea].Name);
             }
-            return SaveData.TrueLastAreaSID;
+
+            int i = SaveData.TrueLastAreaSID.Length;
+            float size = 0f;
+
+            float maxSize = 580;
+            float extraSize = 3f * ActiveFont.Measure('.').X + ActiveFont.Measure('[').X + ActiveFont.Measure(']').X;
+
+            while (i > 0) {
+                float newSize = size + ActiveFont.Measure(SaveData.TrueLastAreaSID[i - 1]).X;
+                if (newSize + extraSize > maxSize)
+                    break;
+                size = newSize;
+                i -= 1;
+            }
+
+            for (int j = 0; j < i; j++) {
+                size += ActiveFont.Measure(SaveData.TrueLastAreaSID[j]).X;
+                if (size > maxSize)
+                    return "[..." + SaveData.TrueLastAreaSID[i..] + "]";
+            }
+            return "[" + SaveData.TrueLastAreaSID + "]";
         }
 
         // very similar to MoveTo, except the easing is different if the slot was already moving.
