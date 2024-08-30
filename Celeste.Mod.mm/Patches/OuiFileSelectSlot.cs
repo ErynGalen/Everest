@@ -301,7 +301,7 @@ namespace Celeste {
         }
 
         public string GetFurthestAreaName() {
-            if (string.IsNullOrEmpty(SaveData.TrueLastAreaSID)) {
+            if (!CoreModule.Settings.TrueLastAreaInFileSelect || string.IsNullOrEmpty(SaveData.TrueLastAreaSID)) {
                 return Dialog.Clean(AreaData.Areas[FurthestArea].Name);
             }
             return SaveData.TrueLastAreaSID;
