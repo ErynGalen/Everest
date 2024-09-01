@@ -305,24 +305,25 @@ namespace Celeste {
                 return Dialog.Clean(AreaData.Areas[FurthestArea].Name);
             }
 
-            int i = SaveData.TrueLastAreaSID.Length;
+            float maxSize = 580;
+            float fullnameExtraSize = ActiveFont.Measure('[').X + ActiveFont.Measure(']').X;
+            float truncatedExtraSize = 3f * ActiveFont.Measure('.').X + fullnameExtraSize;
+
+            int truncatedStart = SaveData.TrueLastAreaSID.Length;
             float size = 0f;
 
-            float maxSize = 580;
-            float extraSize = 3f * ActiveFont.Measure('.').X + ActiveFont.Measure('[').X + ActiveFont.Measure(']').X;
-
-            while (i > 0) {
-                float newSize = size + ActiveFont.Measure(SaveData.TrueLastAreaSID[i - 1]).X;
-                if (newSize + extraSize > maxSize)
+            while (truncatedStart > 0) {
+                float newSize = size + ActiveFont.Measure(SaveData.TrueLastAreaSID[truncatedStart - 1]).X;
+                if (newSize + truncatedExtraSize > maxSize)
                     break;
                 size = newSize;
-                i -= 1;
+                truncatedStart -= 1;
             }
 
-            for (int j = 0; j < i; j++) {
-                size += ActiveFont.Measure(SaveData.TrueLastAreaSID[j]).X;
-                if (size > maxSize)
-                    return "[..." + SaveData.TrueLastAreaSID[i..] + "]";
+            for (int i = 0; i < truncatedStart; i++) {
+                size += ActiveFont.Measure(SaveData.TrueLastAreaSID[i]).X;
+                if (size + fullnameExtraSize > maxSize)
+                    return "[..." + SaveData.TrueLastAreaSID[truncatedStart..] + "]";
             }
             return "[" + SaveData.TrueLastAreaSID + "]";
         }
@@ -440,7 +441,7 @@ namespace MonoMod {
             cursor.GotoNext(instr => instr.MatchLdfld("Celeste.AreaData", "Name"),
                 instr => instr.MatchLdnull(),
                 instr => instr.MatchCall("Celeste.Dialog", "Clean"));
-            cursor.Goto(cursor.Index - 4);
+            cursor.Index -= 4;
             cursor.RemoveRange(7);
             // Replace with this.GetFurthestAreaName()
             cursor.Emit(OpCodes.Ldarg_0);
